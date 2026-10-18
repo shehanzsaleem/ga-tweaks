@@ -1,0 +1,18 @@
+/* Injected card: looks native, behaves inert. */
+[data-ga-est-revenue],
+[data-ga-views-mom] {
+  cursor: default !important;
+  pointer-events: none !important;
+}
+
+[data-ga-est-revenue] .picker,
+[data-ga-views-mom] .picker {
+  pointer-events: none !important;
+  cursor: default !important;
+}
+
+/* Never show the blue active-tab underline on our clone */
+[data-ga-est-revenue] .mdc-tab-indicator,
+[data-ga-views-mom] .mdc-tab-indicator {
+  display: none !important;
+}
