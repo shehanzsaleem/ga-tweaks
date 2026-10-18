@@ -143,14 +143,16 @@
   }
 
   const PICKER_SELECTORS = [
+    'ga-date-range-picker-v2', 'ga-date-range-selector',
     'ga-date-picker', 'ga-date-range-picker', 'ga-date-range',
     '[class*="date-range"]', '[class*="daterange"]', '[class*="date-picker"]',
     '[aria-label*="date range" i]', '[aria-label*="Date range"]',
   ].join(',');
 
-  function periodFromPicker() {
+  // Home has several cards, each with its own picker: read the Views card's first.
+  function periodFromPicker(scope = document) {
     let nodes;
-    try { nodes = document.querySelectorAll(PICKER_SELECTORS); } catch (e) { return null; }
+    try { nodes = scope.querySelectorAll(PICKER_SELECTORS); } catch (e) { return null; }
     for (const el of nodes) {
       const text = `${el.getAttribute('aria-label') || ''} ${el.textContent || ''}`
         .replace(/\s+/g, ' ').trim().slice(0, 200);
@@ -176,8 +178,9 @@
   }
 
   // Days in the range currently on screen; falls back to the configured base.
-  function detectPeriodDays() {
-    return periodFromHash() || periodFromPicker() || cfg.baseDays;
+  function detectPeriodDays(host) {
+    const card = host?.closest('xap-card, ga-card');
+    return periodFromHash() || (card && periodFromPicker(card)) || periodFromPicker() || cfg.baseDays;
   }
 
   // 500 views per £1 over 28 days, scaled to however long the range actually is.
@@ -309,7 +312,7 @@
       renderCard(MOM_MARK, null, null);
       return;
     }
-    const periodDays = detectPeriodDays();
+    const periodDays = detectPeriodDays(src.host);
     const revenue = renderCard(MARK, src, revenueSpec(src, periodDays), null);   // end of the row
     renderCard(MOM_MARK, src, momSpec(src, periodDays), revenue);
   }
