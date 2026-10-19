@@ -1,18 +1,18 @@
 /* Injected card: looks native, behaves inert. */
 [data-ga-est-revenue],
-[data-ga-views-mom] {
+[data-ga-rev-next] {
   cursor: default !important;
   pointer-events: none !important;
 }
 
 [data-ga-est-revenue] .picker,
-[data-ga-views-mom] .picker {
+[data-ga-rev-next] .picker {
   pointer-events: none !important;
   cursor: default !important;
 }
 
 /* Never show the blue active-tab underline on our clone */
 [data-ga-est-revenue] .mdc-tab-indicator,
-[data-ga-views-mom] .mdc-tab-indicator {
+[data-ga-rev-next] .mdc-tab-indicator {
   display: none !important;
 }

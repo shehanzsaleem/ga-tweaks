@@ -1,16 +1,17 @@
 /* GA Estimated Revenue — injects two metric cards after Views:
    1. Est. revenue: Views ÷ divisor. The divisor scales linearly with the selected
       date range: 500 per 28 days => 250 over 14 days, 1000 over 8 weeks.
-   2. Views MoM: GA's own period-over-period delta for Views, normalised to a
-      28-day "month" by compounding: (1 + r)^(28 / days) − 1. */
+   2. Est. rev next month: Est. revenue × growth factor, where the factor is GA's own
+      period-over-period Views delta as a multiplier, normalised to a 28-day "month"
+      by compounding: (1 + r)^(28 / days). +157.5% => ×2.58. */
 (() => {
   'use strict';
 
   const MARK = 'data-ga-est-revenue';
-  const MOM_MARK = 'data-ga-views-mom';
+  const NEXT_MARK = 'data-ga-rev-next';
   const MONTH_DAYS = 28;
-  const MIN_MOM_DAYS = 7;          // shorter ranges compound noise into nonsense
-  const MOM_LABEL = 'Views MoM';
+  const MIN_GROWTH_DAYS = 7;       // shorter ranges compound noise into nonsense
+  const NEXT_LABEL = 'Est. rev next month';
   const DEFAULTS = { divisor: 500, baseDays: 28, currency: '£', label: 'Est. revenue' };
   let cfg = { ...DEFAULTS };
 
@@ -34,12 +35,9 @@
     return cfg.currency + Math.round(value).toLocaleString('en-GB');
   }
 
-  // "+12.3%" | "−4.0%"; "≈" marks a figure normalised from a non-28-day range.
-  function formatPct(ratio, approx) {
-    const pct = Math.abs(ratio * 100);
-    const digits = pct >= 100 ? 0 : 1;
-    const body = pct.toLocaleString('en-GB', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-    return `${approx ? '≈ ' : ''}${ratio < 0 ? '−' : '+'}${body}%`;
+  // 2.575 -> "×2.58"
+  function formatFactor(factor) {
+    return '×' + factor.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   /* ---------- Views delta (period over period) ---------- */
@@ -195,7 +193,7 @@
   // Find the visible Views tab and the .mat-mdc-tab wrapper that is its real "card".
   function findSource() {
     for (const metricTab of document.querySelectorAll('ga-metric-tab')) {
-      if (metricTab.closest(`[${MARK}], [${MOM_MARK}]`)) continue;   // skip our own clones
+      if (metricTab.closest(`[${MARK}], [${NEXT_MARK}]`)) continue;   // skip our own clones
       const label = metricTab.querySelector('.picker span')?.textContent.trim() || '';
       if (!VIEW_LABELS.test(label)) continue;
       if (!metricTab.querySelector('.value')) continue;
@@ -288,20 +286,22 @@
     return {
       label: cfg.label,
       value: formatMoney(views / divisor),
+      revenue: views / divisor,
       signature: [rawViews, divisor, cfg.currency, cfg.label].join('|'),
     };
   }
 
-  function momSpec(src, periodDays) {
-    if (periodDays < MIN_MOM_DAYS || !comparesPreviousPeriod()) return null;
+  // This month's estimate × the Views growth factor (GA's delta, compounded to 28 days).
+  function nextMonthSpec(src, periodDays, revenue) {
+    if (!revenue || periodDays < MIN_GROWTH_DAYS || !comparesPreviousPeriod()) return null;
     const r = readViewsDelta(src.metricTab);
     if (r === null || r <= -1) return null;
-    const mom = periodDays === MONTH_DAYS ? r : (1 + r) ** (MONTH_DAYS / periodDays) - 1;
+    const factor = (1 + r) ** (MONTH_DAYS / periodDays);
     return {
-      label: MOM_LABEL,
-      value: formatPct(mom, periodDays !== MONTH_DAYS),
-      color: mom > 0 ? GREEN : mom < 0 ? RED : null,
-      signature: [r, periodDays].join('|'),
+      label: NEXT_LABEL,
+      value: `${formatMoney(revenue.revenue * factor)} (${formatFactor(factor)})`,
+      color: factor > 1 ? GREEN : factor < 1 ? RED : null,
+      signature: [revenue.signature, r, periodDays].join('|'),
     };
   }
 
@@ -309,12 +309,13 @@
     const src = findSource();
     if (!src) {                       // Views not on screen (user swapped the metric)
       renderCard(MARK, null, null);
-      renderCard(MOM_MARK, null, null);
+      renderCard(NEXT_MARK, null, null);
       return;
     }
     const periodDays = detectPeriodDays(src.host);
-    const revenue = renderCard(MARK, src, revenueSpec(src, periodDays), null);   // end of the row
-    renderCard(MOM_MARK, src, momSpec(src, periodDays), revenue);
+    const revenue = revenueSpec(src, periodDays);
+    const revenueCard = renderCard(MARK, src, revenue, null);   // end of the row
+    renderCard(NEXT_MARK, src, nextMonthSpec(src, periodDays, revenue), revenueCard);
   }
 
   /* ---------- observe GA's re-renders ---------- */

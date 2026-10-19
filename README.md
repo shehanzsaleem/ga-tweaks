@@ -1,26 +1,27 @@
 # GA Estimated Revenue
 
 Chrome extension (Manifest V3) that adds two metric cards to the Google Analytics 4
-metric row: **Est. revenue = Views ÷ divisor** (formatted as GBP) and **Views MoM**, the
-month-on-month change in views.
+metric row: **Est. revenue = Views ÷ divisor** (formatted as GBP) and **Est. rev next
+month**, that revenue multiplied by how fast views are growing.
 
 The divisor scales linearly with the date range on screen — 500 views per £1 over
 28 days, so 14 days divides by 250 and 8 weeks (56 days) by 1000. With 16K views over
 28 days the card reads `£32`, sitting to the right of Views and styled identically to
 GA's native cards (it's a clone of the Views tab). No subtitle under the value.
 
-## Views MoM card
+## Est. rev next month card
 
-Sits right of Est. revenue. It reads GA's own delta under Views (the "↑ 12.3%" comparing
-the range with the preceding period of the same length) and turns it into a 28-day
-month-on-month figure:
+Sits right of Est. revenue. It takes GA's own delta under Views (the "↑ 157.5%" comparing
+the range with the preceding period of the same length), turns it into a multiplier and
+applies it to this month's estimate:
 
-- **28-day range** (Home's default "Last 28 days"): shown as-is, e.g. `+12.3%`.
-- **Any other range of 7+ days**: compounded to 28 days, `(1 + r)^(28 / days) − 1`, and
-  marked `≈`. A 14-day +10% reads `≈ +21.0%`.
-- Green when up, red when down. Hidden when there's no comparison, the range is under
-  7 days, the direction arrow can't be read, or the comparison isn't the preceding
-  period (e.g. "same period last year", detected from `_u.date10/11` in the URL).
+- **Factor** = `1 + r`, so ↑ 157.5% is ×2.58 and ↓ 20% is ×0.80.
+- **Value** = Est. revenue × factor, shown with the factor, e.g. `£82 (×2.58)` from `£32`.
+- **28-day range** (Home's default "Last 28 days"): the factor is used as-is. Any other
+  range of 7+ days is compounded to 28 days: `(1 + r)^(28 / days)`.
+- Green when the factor is above 1, red below. Hidden when there's no comparison, the
+  range is under 7 days, the direction arrow can't be read, or the comparison isn't the
+  preceding period (e.g. "same period last year", detected from `_u.date10/11` in the URL).
 
 ## Install
 
@@ -82,6 +83,6 @@ the D3-bound `__data__` on the Home card's Views chart (exact daily values, not 
   separator, "Last N days").
 - "Last N months" is treated as N × 30 days; a custom range read from the hash is exact.
 - Below ~1200px viewport width the 6-card row may crowd or wrap.
-- The MoM sign comes from GA's delta arrow (icon name / `favorable` class). If Google
+- The growth sign comes from GA's delta arrow (icon name / `favorable` class). If Google
   changes that markup the card hides rather than guess.
 - Cosmetic and local only — never appears in exports, scheduled emails, or shared reports.
