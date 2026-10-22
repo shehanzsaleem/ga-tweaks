@@ -344,7 +344,8 @@
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return;
-    for (const [k, { newValue }] of Object.entries(changes)) cfg[k] = newValue;
+    // A removed key comes through with no newValue: fall back to its default.
+    for (const [k, { newValue }] of Object.entries(changes)) cfg[k] = newValue ?? DEFAULTS[k];
     for (const k of Object.keys(lastSignatures)) lastSignatures[k] = null;   // force rebuild
     safeRender();
   });

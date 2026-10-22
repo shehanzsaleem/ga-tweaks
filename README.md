@@ -1,12 +1,24 @@
 # GA Tweaks
 
-Chrome extension (Manifest V3) that adds a few things to Google Analytics 4:
+**Google Analytics 4, on steroids.** A small Chrome extension that makes GA4 more useful
+day to day: revenue estimates next to your Views, a forecast on the Views chart, and a
+compact layout that uses your whole screen instead of a narrow column with wide margins.
 
-- **Est. revenue** card: Views ÷ divisor, formatted as GBP.
-- **Est. rev next month** card: that revenue multiplied by how fast views are growing.
-- **Views forecast**: revenue in the Views chart tooltip, plus a *Prediction* toggle.
-- **Compact layout**: a third of GA's padding, and cards and charts stretched to the full
-  window width. Toggle with **Alt+C** or the checkbox in the toolbar popup.
+- **Est. revenue** card: Views ÷ a rate you set (500 views per £1 over 28 days by
+  default), right beside GA's own Views card.
+- **Est. rev next month** card: that estimate multiplied by how fast views are growing.
+- **Views forecast**: estimated revenue in the Views chart tooltip, plus a *Prediction*
+  toggle that draws a 28-day projection after the selected range.
+- **Compact layout**: about a third of GA's padding, and cards, charts, carousels and the
+  Explore landing stretched to the full window width. Toggle with **Alt+C** or the
+  checkbox in the toolbar popup.
+
+Everything runs locally in your browser. The extension makes no network requests, sends
+no data anywhere, and only asks for the `storage` permission (to keep your settings). It
+only runs on `analytics.google.com`, and it never changes your GA data, reports or
+exports: it's display only.
+
+Contributions are welcome — see [Contributing](#contributing).
 
 ## Est. revenue card
 
@@ -33,7 +45,8 @@ applies it to this month's estimate:
 
 1. Open `chrome://extensions`.
 2. Toggle **Developer mode** ON (top-right).
-3. Click **Load unpacked** (top-left) and select this folder.
+3. Click **Load unpacked** (top-left) and select this folder (clone it first:
+   `git clone https://github.com/shehanzsaleem/ga-tweaks.git`).
 4. Open or hard-refresh <https://analytics.google.com/analytics/web/> (Ctrl/Cmd + Shift + R).
    Content scripts only inject on page load, so an already-open tab must be reloaded.
 
@@ -164,5 +177,26 @@ width.
 - The growth sign comes from GA's delta arrow (icon name / `favorable` class). If Google
   changes that markup the card hides rather than guess.
 - Cosmetic and local only — never appears in exports, scheduled emails, or shared reports.
-- Compact layout: the left nav rail isn't narrowed (I couldn't see its markup, so a blind
-  change risked a gap or an overlap).
+- Compact layout: the left nav rail isn't narrowed yet; it needs a look at its live markup
+  so the content pane doesn't end up with a gap or an overlap.
+
+
+## Contributing
+
+Issues and pull requests are welcome: bug reports, fixes for GA markup changes, new
+tweaks, or support for other locales and currencies.
+
+- There's no build step. Edit the files, click ↻ on the extension in `chrome://extensions`,
+  then reload the Analytics tab.
+- GA4 is an Angular app whose internal class and tag names change without notice. When
+  something stops working, the selectors are the first thing to check; please say which
+  GA page and what you saw.
+- Keep features failing safe: if the markup isn't what you expect, show nothing rather
+  than a wrong number or a broken layout.
+- Keep it local: no network requests, analytics or new permissions.
+- Each feature lives in its own file (`content.js` for the cards, `forecast.js` for the
+  chart, `compact.js`/`compact.css` for the layout); match the surrounding style.
+
+## License
+
+[MIT](LICENSE)

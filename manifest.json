@@ -3,6 +3,7 @@
   "name": "GA Tweaks",
   "version": "2.0.0",
   "description": "Google Analytics 4 tweaks: Estimated Revenue and next-month cards, a Views forecast, and a compact layout with full-width cards (Alt+C).",
+  "homepage_url": "https://github.com/shehanzsaleem/ga-tweaks",
   "permissions": [
     "storage"
   ],
