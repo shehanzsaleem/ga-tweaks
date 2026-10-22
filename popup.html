@@ -27,9 +27,20 @@
     button:hover { background: #1765cc; }
     .hint { font-size: 11px; color: #5f6368; margin: 10px 0 0; line-height: 1.4; }
     .saved { color: #188038; font-size: 12px; text-align: center; height: 14px; margin-top: 8px; }
+    .toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #202124; margin: 0; cursor: pointer; }
+    .toggle:has(input:disabled) { color: #9aa0a6; cursor: default; }
+    .toggle input { width: 16px; height: 16px; margin: 0; accent-color: #1a73e8; }
+    .toggle kbd { margin-left: auto; font: inherit; font-size: 11px; color: #5f6368; }
+    #compactHint { margin-top: 6px; }
+    hr { border: 0; border-top: 1px solid #dadce0; margin: 14px 0; }
   </style>
 </head>
 <body>
+  <label class="toggle"><input id="compact" type="checkbox" disabled /> Compact layout <kbd>Alt+C</kbd></label>
+  <p class="hint" id="compactHint" hidden></p>
+
+  <hr />
+
   <h1>Estimated Revenue settings</h1>
 
   <label for="label">Card label</label>

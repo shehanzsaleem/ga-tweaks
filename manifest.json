@@ -1,12 +1,24 @@
 {
   "manifest_version": 3,
-  "name": "GA Estimated Revenue",
-  "version": "1.3.0",
-  "description": "Adds Estimated Revenue and next-month revenue cards to Google Analytics, calculated from the Views figure and its growth.",
+  "name": "GA Tweaks",
+  "version": "2.0.0",
+  "description": "Google Analytics 4 tweaks: Estimated Revenue and next-month cards, a Views forecast, and a compact layout with full-width cards (Alt+C).",
   "permissions": [
     "storage"
   ],
   "content_scripts": [
+    {
+      "matches": [
+        "https://analytics.google.com/*"
+      ],
+      "css": [
+        "compact.css"
+      ],
+      "js": [
+        "compact.js"
+      ],
+      "run_at": "document_start"
+    },
     {
       "matches": [
         "https://analytics.google.com/*"
@@ -31,7 +43,7 @@
     }
   ],
   "action": {
-    "default_title": "GA Estimated Revenue settings",
+    "default_title": "GA Tweaks",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

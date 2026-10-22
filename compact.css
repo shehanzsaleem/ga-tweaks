@@ -1,0 +1,169 @@
+/* GA Compact — every rule sits under html.ga-compact, so dropping the class (Alt+C or the
+   popup) gives GA its own look back.
+
+   Specificity instead of !important: the wrapper html.ga-compact:not(#gac) carries an ID's
+   weight, which beats Angular's encapsulated `.class[_ngcontent-…]` rules without naming
+   the hashed attributes (no element has id="gac"). !important is kept only where GA
+   writes the value inline: main-layout's offset, the cards' px widths, and the carousels'
+   scroll transforms.
+
+   Full width: GA sizes every card in px from a 160px column grid (306 / 466 / 626 /
+   1106px, written inline on xap-card). Widening the wrapper alone leaves those widths
+   fixed, which is what left a gap. compact.js copies each card's intended width into
+   --gaext-w so the cards grow in proportion to it. Internal GA tag names here
+   (ga-horizontal-fade, vero-template-picker, …) are the first thing to check if a
+   section stops behaving after a GA update. */
+
+html.ga-compact:not(#gac) {
+  /* One spacing scale: change these and every card, grid and heading follows. */
+  --gaext-gap: 16px;       /* between any two cards, across and down */
+  --gaext-section: 32px;   /* above each section heading */
+  --gaext-head: 12px;      /* between a section heading and its cards */
+
+  /* ---------- fixed report header ---------- */
+
+  & .ga-report-header { padding: 6px 12px; }
+  & .report-controls { margin: 0 8px; }
+  & .report-title-section { padding: 8px 0 6px; }
+
+  /* ---------- page body ---------- */
+
+  & .main-layout { padding: 8px 12px 12px; }
+
+  /* Clear the fixed header at its compact height. compact.js measures it with a
+     ResizeObserver and sets data-gac-header only when a report header is on the page;
+     without one, GA's own offset is left alone. */
+  &[data-gac-header] .main-layout { margin-top: var(--gac-header-h) !important; }
+
+  /* ---------- cards ---------- */
+
+  & :is(ga-card, .ga-card, gold-insights-card-wrapper) { margin-top: 8px; }
+  & :is(ga-card, .ga-card, gold-insights-card-wrapper).bottom-margin { margin-bottom: 8px; }
+  & .tab-contents { padding: 0 8px; }
+  & xap-card-content.card-content { padding: 8px 8px 0; }
+  & xap-card-footer.card-footer { padding-left: 8px; height: auto; min-height: 0; }
+
+  /* GA gave headings 36px above and nothing below, so they sat on the cards. */
+  & .section-header { margin: var(--gaext-section) 0 var(--gaext-head) 0 !important; }
+
+  /* ---------- card lists (Home, Reports snapshot, detail reports, Realtime) ---------- */
+
+  & ga-card-list { min-width: 0; }
+
+  & .ga-card-list-content {
+    flex: 1 1 auto !important;
+    flex-wrap: wrap !important;
+    min-width: 0 !important;
+    max-width: 100% !important;   /* stops a chart <-> container growth loop on detail reports */
+    gap: var(--gaext-gap) !important;
+    align-items: stretch !important;
+  }
+
+  /* Grow in proportion to GA's own width, so a 4-column card stays twice a 2-column one. */
+  & .ga-card-list-content > ga-card {
+    flex: var(--gaext-w, 1) 1 calc(var(--gaext-w, 320) * 1px) !important;
+    margin: 0 !important;   /* GA mixes 8px 0 0 and 8px 0, which made row-mates uneven */
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* The inner card fills its slot instead of keeping GA's inline px width. GA spaces cards
+     with a 7px margin on this inner card; at full width that margin pushed each card 14px
+     into its neighbour, so it goes and the containers' gap does all the spacing. */
+  & :is(ga-card > xap-card, ga-card xap-card.xap-card, .ga-card-list-content xap-card, gold-insights-card) {
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: 100%;
+    box-sizing: border-box !important;
+  }
+  & ga-card xap-card-content { width: auto !important; }
+  & ga-card ga-card-content { display: block !important; }
+  & ga-card :is(mat-grid-list, ga-panel) { max-width: 100%; }
+
+  /* Anomaly / insights banner on detail reports (inline 1120px). */
+  & .insights-summary-banner { width: auto !important; max-width: 100% !important; }
+
+  /* ---------- carousels -> wrapping grids (Recently accessed, Suggested for you, Insights) ---------- */
+
+  & ga-horizontal-fade .content-area {
+    /* A definite width, or auto-fill finds one column if the parent is a flex row. */
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    display: grid !important;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)) !important;
+    gap: var(--gaext-gap) !important;   /* GA resets an unforced gap to 0 */
+    align-items: stretch !important;
+    overflow: visible !important;
+    transform: none !important;
+  }
+  & ga-horizontal-fade .content-area > * {
+    min-width: 0 !important;
+    width: auto !important;
+    margin: 0 !important;
+    flex: none !important;
+  }
+  & ga-horizontal-fade .content-area > ga-card { display: block !important; }
+  & ga-horizontal-fade .content-area > * > * {
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box;
+  }
+  & ga-horizontal-fade > :not(.content-area) { display: none !important; }   /* scroll arrows */
+  /* Recently accessed tiles kept a fixed 306px inner width inside each cell. */
+  & :is(gold-insights-card > .gold-insights-card, gold-insights-card mat-card) {
+    width: 100% !important;
+    max-width: none !important;
+    box-sizing: border-box !important;
+  }
+
+  /* ---------- Explore landing (was a centred 1100px column) ---------- */
+
+  & :is(vero-template-picker, saved-analysis-list-m2) {
+    width: 100% !important;
+    max-width: none !important;
+    flex: 1 1 auto !important;
+  }
+  & vero-template-picker * { max-width: none !important; }
+  & :is(vero-template-picker > div, vero-template-picker :is(
+      .template-picker-component, .template-picker-carousel,
+      .carousel-content, ul.content-table, template-card)) { width: auto !important; }
+  & vero-template-picker ul.content-table {
+    grid-auto-flow: row !important;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)) !important;
+    overflow: visible !important;
+  }
+  & vero-template-picker .template-picker-carousel > button { display: none !important; }
+  & saved-analysis-list-m2 :is(
+      .saved-analysis-list, .saved-analysis-list-container,
+      .saved-analysis-list-table, .saved-analysis-list-table-row) { width: auto !important; }
+
+  /* ---------- report and Explore tables ---------- */
+
+  /* Material tables take their row heights from these tokens. */
+  & .mat-mdc-table {
+    --mat-table-row-item-container-height: 36px;
+    --mat-table-header-container-height: 40px;
+  }
+
+  /* Plain tables: shorter rows, same font size. Skips the date picker's calendar,
+     anything in an overlay, and virtual-scroll tables (their scroll maths assumes a
+     fixed row height). */
+  & table:not(.mat-calendar-table, .cdk-overlay-container table, cdk-virtual-scroll-viewport table) {
+    & tr { height: auto; }
+    & :is(td, th) { padding-top: 4px; padding-bottom: 4px; height: auto; }
+  }
+
+  /* ---------- other width caps found by compact.js ---------- */
+
+  /* "max": a binding px max-width. "width": a fixed width narrower than its parent. */
+  & [data-gac-unclamp] { max-width: none !important; }
+  & [data-gac-unclamp="width"] { width: auto !important; align-self: stretch !important; }
+  /* Fixed-width cards in a flex row with spare room: share it in proportion to their
+     widths (800 + 480 stay 5:3). */
+  & [data-gac-grow] { flex-grow: var(--gac-grow) !important; max-width: none !important; }
+  /* Fixed px grid tracks with spare room: same tracks as fractions. */
+  & [data-gac-grid] { grid-template-columns: var(--gac-cols) !important; }
+}

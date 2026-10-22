@@ -1,8 +1,14 @@
-# GA Estimated Revenue
+# GA Tweaks
 
-Chrome extension (Manifest V3) that adds two metric cards to the Google Analytics 4
-metric row: **Est. revenue = Views ÷ divisor** (formatted as GBP) and **Est. rev next
-month**, that revenue multiplied by how fast views are growing.
+Chrome extension (Manifest V3) that adds a few things to Google Analytics 4:
+
+- **Est. revenue** card: Views ÷ divisor, formatted as GBP.
+- **Est. rev next month** card: that revenue multiplied by how fast views are growing.
+- **Views forecast**: revenue in the Views chart tooltip, plus a *Prediction* toggle.
+- **Compact layout**: a third of GA's padding, and cards and charts stretched to the full
+  window width. Toggle with **Alt+C** or the checkbox in the toolbar popup.
+
+## Est. revenue card
 
 The divisor scales linearly with the date range on screen — 500 views per £1 over
 28 days, so 14 days divides by 250 and 8 weeks (56 days) by 1000. With 16K views over
@@ -72,6 +78,78 @@ the D3-bound `__data__` on the Home card's Views chart (exact daily values, not 
   not a forecast.
 - It never touches the date-range picker, GA's network calls or GA's chart data.
 
+## Compact layout (`compact.js` + `compact.css`)
+
+Every rule is scoped under `html.ga-compact`, so switching it off restores GA's own look.
+The on/off choice is remembered in GA's `localStorage` (key `gaCompact`, on by default)
+and other open GA tabs follow it. It runs at `document_start` so there's no flash of the
+roomy layout.
+
+### What it changes
+
+| Element | GA default | Compact |
+|---|---|---|
+| `.ga-report-header` | `20px 40px 10px` | `6px 12px` |
+| `.report-controls` | margin `0 28px` | `0 8px` |
+| `.report-title-section` | `18px 0 8px` | `8px 0 6px` |
+| `.main-layout` | `24px 40px 40px 32px`, margin-top 46px | `8px 12px 12px`, margin-top = header height |
+| `ga-card`, `gold-insights-card-wrapper` gaps | 24px | 8px (16px between cards in a list or grid, see Spacing) |
+| `.tab-contents` | `0 24px` | `0 8px` |
+| `xap-card-content.card-content` | `24px 24px 0` | `8px 8px 0` |
+| `xap-card-footer.card-footer` | padding-left 24px | 8px, no fixed height |
+| Table rows (plain `<table>` and Material tables) | GA's | 4px cell padding, 36px Material rows; font size unchanged |
+
+### Header offset
+
+`compact.js` finds the visible `.ga-report-header` and the outermost
+fixed or absolute box between it and `.main-layout`. A ResizeObserver feeds that box's height
+into `--gac-header-h`, which becomes main-layout's margin-top, so nothing sits under the
+header. On pages without a report header (Home), GA's own offset is left alone.
+
+### Full width
+
+GA sizes each card in px from a 160px column grid (306 / 466 / 626 / 1106px), written
+inline on the inner `xap-card`. Widening the outer wrapper alone left those widths fixed,
+which is what left a gap in the middle of Home. So:
+
+- **Card lists** (Home, Reports snapshot, detail reports, Realtime): `compact.js` copies
+  each card's intended width (inline `xap-card` width + 14px) into `--gaext-w`, and the
+  cards flex-grow by it, so a wide card stays wide and a small one stays small while both
+  fill the row. The inner `xap-card` fills its slot. The list is capped at 100% so a chart
+  can't push it wider than the screen.
+- **Detail reports**: the anomaly / insights banner (inline 1120px) stretches.
+- **Carousels** (Recently accessed, Suggested for you, Insights): wrapping grids of
+  ≥320px tiles, 16px apart, scroll arrows hidden.
+- **Explore landing**: no 1100px centred column; templates are a grid of ≥200px tiles
+  and the saved explorations list is full width.
+
+**Spacing.** GA spaces cards with a 7px margin on the inner card, which at full width
+pushed each card 14px into its neighbour. Those margins are removed and the containers
+own all spacing from one scale at the top of `compact.css`: `--gaext-gap` (16px between
+cards, across and down), `--gaext-section` (32px above a section heading) and
+`--gaext-head` (12px between a heading and its cards). Change those three to make it
+tighter or roomier.
+
+These selectors (`ga-card-list`, `ga-horizontal-fade`, `vero-template-picker`,
+`saved-analysis-list-m2`, …) came from inspecting live GA and are internal, so they're the
+first thing to check if a section stops behaving after a Google update.
+
+Anything else that caps a card's width is found by walking up from each card and
+un-capped:
+
+- a px `max-width` that is binding → `max-width: none`
+- a block narrower than its parent (fixed width, or auto-centred) → `width: auto`
+- fixed-width items in a flex row with spare room → they grow in proportion to their widths
+- a grid of px columns with spare room → the same columns as fractions
+
+Each find is logged once in the DevTools console as
+`[GA Compact] un-capped div.some-container — max-width 1280px`. The containers above are
+skipped, since the CSS lays them out itself.
+
+The scan re-runs as GA swaps views (DOM, inline-style and hash changes, throttled to
+~3×/s) and on window resize, then fires a `resize` event so GA's charts redraw at the new
+width.
+
 ## Limitations
 
 - GA only exposes the abbreviated value (`16K`), never the exact count, so the figure is
@@ -86,3 +164,5 @@ the D3-bound `__data__` on the Home card's Views chart (exact daily values, not 
 - The growth sign comes from GA's delta arrow (icon name / `favorable` class). If Google
   changes that markup the card hides rather than guess.
 - Cosmetic and local only — never appears in exports, scheduled emails, or shared reports.
+- Compact layout: the left nav rail isn't narrowed (I couldn't see its markup, so a blind
+  change risked a gap or an overlap).

@@ -22,3 +22,19 @@ $('save').addEventListener('click', () => {
     setTimeout(() => { $('saved').textContent = ''; }, 1500);
   });
 });
+
+/* ---------- compact layout (state lives in the page; compact.js answers) ---------- */
+
+chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+  if (!tab) return;
+  const send = (msg) => chrome.tabs.sendMessage(tab.id, msg)
+    .then((res) => { $('compact').checked = res.on; $('compact').disabled = false; })
+    .catch(() => {
+      $('compact').disabled = true;
+      $('compactHint').hidden = false;
+      $('compactHint').textContent = 'Open Google Analytics in this tab to switch it (reload the tab if it was open before the extension was updated).';
+    });
+
+  send({ type: 'gac:get' });
+  $('compact').addEventListener('change', () => send({ type: 'gac:set', on: $('compact').checked }));
+});
