@@ -15,8 +15,10 @@ compact layout that uses your whole screen instead of a narrow column with wide 
 
 Everything runs locally in your browser. The extension makes no network requests, sends
 no data anywhere, and only asks for the `storage` permission (to keep your settings). It
-only runs on `analytics.google.com`, and it never changes your GA data, reports or
-exports: it's display only.
+keeps daily Views and Active users totals in GA's `localStorage`, for the bot-adjusted
+estimate, and they never leave the browser. It only runs on `analytics.google.com`, it
+never clicks anything in GA, and it never changes your GA data, reports or exports: it's
+display only.
 
 Contributions are welcome — see [Contributing](#contributing).
 
@@ -26,6 +28,33 @@ The divisor scales linearly with the date range on screen — 500 views per £1 
 28 days, so 14 days divides by 250 and 8 weeks (56 days) by 1000. With 16K views over
 28 days the card reads `£32`, sitting to the right of Views and styled identically to
 GA's native cards (it's a clone of the Views tab). No subtitle under the value.
+
+## Bot-adjusted estimate (`anomaly.js`)
+
+Bots and server-sent events inflate GA without earning a penny, so **Est. revenue**
+headlines a bot-adjusted figure with the raw one beside it (`£48`, `Bot-adjusted, raw
+£52`). Hover the card for the difference. It uses page views only, never users or key
+events, because ads are earned on rendered pages.
+
+A day is anomalous when either is true:
+
+- Its views per active user fall more than 50% below the range's median, which means
+  users with no page views behind them. This needs at least 7 days of both series.
+- It's listed in `KNOWN_ANOMALIES` in `anomaly.js`, per GA property. Add a range there
+  for a spike the ratio can't see.
+
+An anomalous day then counts as the median of the clean days, and never more than it
+really had, so adjusting can only lower the estimate. Those days are also left out of
+the Prediction model and of the growth in **Est. rev next month**, and a small badge
+beside the Prediction button warns about them.
+
+**Getting it to appear.** Home's chart only holds the selected metric and the extension
+never clicks, so select **Views** and **Active users** on the card once. Each series is
+remembered by date, and until Views covers the whole range the card shows the raw figure.
+
+**What it can't see from Home.** There's no device data on the page, so it can't count
+users with a blank OS or screen resolution, and it can't filter sessions by channel,
+device and engagement. Users beyond what the day's views explain is the stand-in.
 
 ## Est. rev next month card
 
@@ -40,6 +69,10 @@ applies it to this month's estimate:
 - Green when the factor is above 1, red below. Hidden when there's no comparison, the
   range is under 7 days, the direction arrow can't be read, or the comparison isn't the
   preceding period (e.g. "same period last year", detected from `_u.date10/11` in the URL).
+
+## Tests
+
+`node --test` runs the anomaly rules against real daily figures. No dependencies.
 
 ## Install
 
@@ -87,8 +120,8 @@ the D3-bound `__data__` on the Home card's Views chart (exact daily values, not 
   ranges, or fewer than 5 days. The state lasts for the tab session (`sessionStorage`).
 - The projection is a mean-reverting random walk in log space anchored on the last
   7 days, seeded from property + range end + total views, so it's stable across redraws.
-  A range ending today leaves the partial last day out of the model. It's illustrative,
-  not a forecast.
+  A range ending today leaves the partial last day out of the model, and anomalous days
+  are left out too. It's illustrative, not a forecast.
 - It never touches the date-range picker, GA's network calls or GA's chart data.
 
 ## Compact layout (`compact.js` + `compact.css`)

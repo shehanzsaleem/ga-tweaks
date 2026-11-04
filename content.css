@@ -16,3 +16,15 @@
 [data-ga-rev-next] .mdc-tab-indicator {
   display: none !important;
 }
+
+/* Hover only, for the tooltip. The card's click handler keeps it inert. */
+[data-ga-est-revenue][title],
+[data-ga-rev-next][title] {
+  pointer-events: auto !important;
+}
+
+.gaext-card-note {
+  color: #5f6368 !important;
+  font-size: 12px;
+  white-space: nowrap;
+}
