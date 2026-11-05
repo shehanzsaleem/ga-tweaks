@@ -1,6 +1,8 @@
 /* GA Estimated Revenue — Views chart extras on the Home overview card:
    1. "Est. monthly revenue" row in the chart tooltip (daily views × 28 ÷ 250).
    2. A "Prediction" toggle that overlays a seeded 28-day random-walk projection.
+   3. The bot-adjusted series (anomaly.js): the projection trains on it, the Est. revenue
+      tile reads it from a <html> attribute, and a badge warns of anomalous days.
    Runs in the page's MAIN world: D3's bound __data__ expandos aren't visible from
    the isolated content-script world. GA's own chart nodes are never mutated —
    in prediction mode GA's plot is hidden with a class and ours is drawn on top. */
@@ -25,9 +27,18 @@
   const LAYER = 'data-ga-forecast-layer';
   const ON_CLASS = 'gaext-prediction-on';
   const STORE_KEY = 'gaext-prediction';
+  const BADGE = 'data-gaext-anomaly-badge';
+  const ADJUSTED_ATTR = 'data-gaext-adjusted';   // read by content.js, in the isolated world
+  const ADJUSTED_EVENT = 'gaext:adjusted';
+  const SERIES_PREFIX = 'gaext-series-';
+  const SERIES_DAYS = 120;
+  const MIN_TRAINING_DAYS = 5;
 
   const BLUE = '#1a73e8';
   const VIEW_KEYS = /^(views|page ?views|screen ?page ?views)$/i;
+  const USER_KEYS = /^(active users|users)$/i;
+
+  const { analyseDays, dayKey } = window.__gaextAnomaly;
 
   const fmtViews = new Intl.NumberFormat('en-GB', { maximumFractionDigits: 0 });
   const fmtMoney = new Intl.NumberFormat('en-GB', { style: 'currency', currency: CURRENCY, minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -42,7 +53,8 @@
   const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-  function readViewsChart() {
+  // The chart on screen, whichever metric is selected.
+  function readChart() {
     const tabChart = document.querySelector('ga-tab-chart');
     const svg = tabChart?.querySelector('ga-line-chart > svg');
     if (!svg) return null;
@@ -53,7 +65,7 @@
     const curEl = lines.find((p) => !p.hasAttribute('stroke-dasharray'));
     const prevEl = lines.find((p) => p.hasAttribute('stroke-dasharray'));
     const cur = curEl?.__data__;
-    if (!cur || !VIEW_KEYS.test(String(cur.key || '')) || !Array.isArray(cur.points) || cur.points.length < 2) return null;
+    if (!cur || !Array.isArray(cur.points) || cur.points.length < 2) return null;
     const toPts = (arr) => arr.map((p) => ({ date: +p.date, value: Math.max(0, +p.value || 0) }));
     const points = toPts(cur.points);
     const prevPoints = Array.isArray(prevEl?.__data__?.points) ? toPts(prevEl.__data__.points) : null;
@@ -66,6 +78,11 @@
       svgW: +svg.getAttribute('width'), svgH: +svg.getAttribute('height'),
       label: svg.querySelector('.legend-entry.dimension-legend text.label')?.textContent.trim() || 'Selected range',
     };
+  }
+
+  function readViewsChart() {
+    const chart = readChart();
+    return chart && VIEW_KEYS.test(chart.key) ? chart : null;
   }
 
   function ineligibleReason(chart) {
@@ -89,16 +106,23 @@
     return history.at(-1).date >= todayUtc ? history.slice(0, -1) : history;
   }
 
+  // The model's input: anomalous days are left out, so a bot spike can't lift the forecast.
+  function trainingSlice(history) {
+    const model = modelSlice(history);
+    if (!analysis) return model;
+    const kept = model.filter((p) => !analysis.flagged.includes(dayKey(p.date)));
+    return kept.length >= MIN_TRAINING_DAYS ? kept : model;
+  }
+
   function projectionSeed(history) {
-    const values = modelSlice(history).map((p) => p.value);
-    const propertyId = (location.hash.match(/p(\d+)/) || [])[1] || '';
-    return `${propertyId}|${history.at(-1).date}|${values.reduce((a, b) => a + b, 0)}`;
+    const values = trainingSlice(history).map((p) => p.value);
+    return `${propertyId()}|${history.at(-1).date}|${values.reduce((a, b) => a + b, 0)}`;
   }
 
   // Mean-reverting (OU-style) random walk in log space, anchored on the recent
   // 7-day level with a small damped trend. Deterministic per dataset.
   function projectViews(history /* [{date,value}] daily, oldest→newest */, seed, horizon = PROJECTION_DAYS) {
-    const values = modelSlice(history).map((p) => p.value);
+    const values = trainingSlice(history).map((p) => p.value);
     const logs = values.map((v) => Math.log(v + 1));
     const rec = logs.slice(-Math.min(14, logs.length));
     const rets = rec.slice(1).map((x, i) => x - rec[i]);
@@ -131,6 +155,77 @@
     return projCache.value;
   }
 
+  /* ---------- bot-adjusted series ---------- */
+
+  let analysis = null;             // analyseDays() for the range on screen, or null
+  let lastChartSig = null;
+
+  const propertyId = () => (location.hash.match(/p(\d+)/) || [])[1] || '';
+
+  function loadSeries() {
+    try {
+      return JSON.parse(localStorage.getItem(SERIES_PREFIX + propertyId())) || {};
+    } catch (e) {
+      return {};                   // storage blocked, or a value we can't read
+    }
+  }
+
+  // Home's chart holds only the selected metric and this extension never clicks, so each
+  // series is kept by date as the user views it. Daily totals only, and they stay in this
+  // browser. GA restates recent days, so a later view overwrites an earlier one.
+  function rememberSeries(chart) {
+    const field = VIEW_KEYS.test(chart.key) ? 'views' : USER_KEYS.test(chart.key) ? 'users' : null;
+    if (!field) return;
+    const series = loadSeries();
+    const kept = { ...series[field] };
+    for (const p of chart.points) kept[dayKey(p.date)] = p.value;
+    const newest = Object.keys(kept).sort().slice(-SERIES_DAYS);
+    series[field] = Object.fromEntries(newest.map((k) => [k, kept[k]]));
+    try {
+      localStorage.setItem(SERIES_PREFIX + propertyId(), JSON.stringify(series));
+    } catch (e) { /* storage blocked: the tile stays on the raw figure */ }
+  }
+
+  function publishAnalysis() {
+    const value = analysis ? JSON.stringify(analysis) : null;
+    const root = document.documentElement;
+    if (root.getAttribute(ADJUSTED_ATTR) === value) return;
+    if (value === null) root.removeAttribute(ADJUSTED_ATTR);
+    else root.setAttribute(ADJUSTED_ATTR, value);
+    document.dispatchEvent(new Event(ADJUSTED_EVENT));
+  }
+
+  function refreshAnalysis() {
+    const chart = readChart();
+    if (!chart) return;            // chart mid-render: keep what we have
+    const sig = [propertyId(), chart.key, chart.isDaily, chart.points.at(-1).date, chart.points.length,
+      chart.points.reduce((a, p) => a + p.value, 0)].join('|');
+    if (sig === lastChartSig) return;
+    lastChartSig = sig;
+    analysis = null;
+    if (chart.isDaily) {
+      rememberSeries(chart);
+      const series = loadSeries();
+      const views = chart.points.map((p) => ({ date: p.date, value: series.views?.[dayKey(p.date)] }));
+      if (views.every((p) => Number.isFinite(p.value))) analysis = analyseDays(views, series.users, propertyId());
+    }
+    publishAnalysis();
+  }
+
+  function updateBadge(btn) {
+    let badge = document.querySelector(`[${BADGE}]`);
+    if (!btn || !analysis?.message) { badge?.remove(); return; }
+    if (!badge) {
+      badge = document.createElement('span');
+      badge.setAttribute(BADGE, '');
+      badge.className = 'gaext-anomaly-badge';
+      for (const type of ['click', 'mousedown', 'pointerdown']) badge.addEventListener(type, (e) => e.stopPropagation());
+    }
+    if (btn.nextElementSibling !== badge) btn.after(badge);
+    if (badge.textContent !== analysis.message) badge.textContent = analysis.message;
+    if (badge.title !== analysis.detail) badge.title = analysis.detail;
+  }
+
   /* ---------- styles ---------- */
 
   const CSS = `
@@ -149,6 +244,7 @@ ga-tab-chart .body-chart{position:relative}
 .gaext-forecast-layer svg{display:block;overflow:visible}
 .gaext-forecast-layer .gaext-hit{pointer-events:all;cursor:default}
 .hover-card.gaext-hover-card{position:absolute;z-index:1000;pointer-events:none}
+.gaext-anomaly-badge{display:inline-block;vertical-align:top;margin:6px 0 0 8px;padding:3px 8px;border-radius:4px;background:#fef7e0;color:#b06000;font:400 12px/18px "Google Sans",Roboto,Arial,sans-serif;cursor:default}
 `;
 
   function ensureStyle() {
@@ -667,13 +763,16 @@ ga-tab-chart .body-chart{position:relative}
       if (!tabChart) {
         teardownOverlay();
         document.querySelectorAll(`[${TOGGLE}]`).forEach((b) => b.remove());
+        updateBadge(null);
         return;
       }
+      refreshAnalysis();
       const chart = readViewsChart();
       const reason = ineligibleReason(chart);
       const on = wanted && !reason;
       const btn = ensureToggle(tabChart);
       if (btn) updateToggle(btn, reason, on);
+      updateBadge(btn);
       if (on) renderOverlay(chart); else teardownOverlay();
     } catch (err) {
       console.error(LOG, err);

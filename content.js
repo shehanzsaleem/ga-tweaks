@@ -1,9 +1,13 @@
 /* GA Estimated Revenue — injects two metric cards after Views:
    1. Est. revenue: Views ÷ divisor. The divisor scales linearly with the selected
-      date range: 500 per 28 days => 250 over 14 days, 1000 over 8 weeks.
+      date range: 500 per 28 days => 250 over 14 days, 1000 over 8 weeks. Page views only:
+      ads are earned on rendered pages, so users and key events play no part. The headline
+      is bot-adjusted once forecast.js has the daily series (see anomaly.js), with the raw
+      figure beside it; until then it is the raw figure from GA's Views card.
    2. Est. rev next month: Est. revenue × growth factor, where the factor is GA's own
       period-over-period Views delta as a multiplier, normalised to a 28-day "month"
-      by compounding: (1 + r)^(28 / days). +157.5% => ×2.58. */
+      by compounding: (1 + r)^(28 / days). +157.5% => ×2.58. The delta is corrected by the
+      same adjustment, so a bot spike in this period can't read as growth. */
 (() => {
   'use strict';
 
@@ -12,6 +16,8 @@
   const MONTH_DAYS = 28;
   const MIN_GROWTH_DAYS = 7;       // shorter ranges compound noise into nonsense
   const NEXT_LABEL = 'Est. rev next month';
+  const ADJUSTED_ATTR = 'data-gaext-adjusted';   // written by forecast.js, in the page's world
+  const ADJUSTED_EVENT = 'gaext:adjusted';
   const DEFAULTS = { divisor: 500, baseDays: 28, currency: '£', label: 'Est. revenue' };
   let cfg = { ...DEFAULTS };
 
@@ -188,6 +194,28 @@
     return per * (periodDays / base);
   }
 
+  /* ---------- bot-adjusted figures ---------- */
+
+  // forecast.js's analysis, if it covers the range on screen.
+  function readAdjusted(periodDays) {
+    try {
+      const adjusted = JSON.parse(document.documentElement.getAttribute(ADJUSTED_ATTR));
+      return adjusted?.days === periodDays && adjusted.rawTotal > 0 ? adjusted : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function revenueTooltip(adjusted, headline, raw) {
+    if (!adjusted) {
+      return 'Raw estimate from page views. Select Views and Active users on this card once ' +
+        'and it switches to the bot-adjusted figure.';
+    }
+    if (headline === raw) return 'No traffic anomalies in this date range. Based on page views only.';
+    return `Bot-adjusted ${headline}: anomalous days count as a normal day, so bot and server ` +
+      `traffic earns nothing. Raw ${raw}: every view GA reports. ${adjusted.detail}`;
+  }
+
   /* ---------- source lookup ---------- */
 
   // Find the visible Views tab and the .mat-mdc-tab wrapper that is its real "card".
@@ -207,9 +235,15 @@
 
   /* ---------- card construction ---------- */
 
-  function buildCard(host, mark, label, value, color) {
+  function buildCard(host, mark, spec) {
+    const { label, value, color, note, title } = spec;
     const card = host.cloneNode(true);   // cloneNode drops event listeners — the card is inert
     card.setAttribute(mark, '');
+    if (title) {
+      // A tooltip needs hover, which the card's CSS otherwise blocks. Clicks still go nowhere.
+      card.title = title;
+      card.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); }, true);
+    }
 
     // Strip every trace of "this tab is selected"
     [...card.classList]
@@ -241,8 +275,14 @@
       if (color) valueSpan.style.color = color;
     }
 
-    // No subtitle: drop the delta row entirely (no formula, no % change)
-    card.querySelector('.delta')?.remove();
+    // Subtitle: the note if there is one, otherwise no delta row at all (no formula, no % change)
+    const delta = card.querySelector('.delta');
+    if (delta && note) {
+      delta.textContent = note;
+      delta.className = 'delta gaext-card-note';
+    } else {
+      delta?.remove();
+    }
 
     return card;
   }
@@ -272,7 +312,7 @@
     }
     // Skip a rebuild if nothing relevant changed (prevents flicker)
     if (existing && existing.isConnected && spec.signature === lastSignatures[mark]) return existing;
-    const card = buildCard(src.host, mark, spec.label, spec.value, spec.color);
+    const card = buildCard(src.host, mark, spec);
     place(mark, card, src.host.parentElement, after);
     lastSignatures[mark] = spec.signature;
     return card;
@@ -283,11 +323,18 @@
     const views = parseMetricValue(rawViews);
     if (views === null) return null;
     const divisor = divisorFor(periodDays);
+    const adjusted = readAdjusted(periodDays);
+    const revenue = (adjusted ? adjusted.adjustedTotal : views) / divisor;
+    const value = formatMoney(revenue);
+    const raw = formatMoney((adjusted ? adjusted.rawTotal : views) / divisor);
     return {
       label: cfg.label,
-      value: formatMoney(views / divisor),
-      revenue: views / divisor,
-      signature: [rawViews, divisor, cfg.currency, cfg.label].join('|'),
+      value,
+      revenue,
+      adjustment: adjusted ? adjusted.adjustedTotal / adjusted.rawTotal : 1,
+      note: value === raw ? null : `Bot-adjusted, raw ${raw}`,
+      title: revenueTooltip(adjusted, value, raw),
+      signature: [rawViews, divisor, cfg.currency, cfg.label, value, raw, adjusted?.detail].join('|'),
     };
   }
 
@@ -296,7 +343,7 @@
     if (!revenue || periodDays < MIN_GROWTH_DAYS || !comparesPreviousPeriod()) return null;
     const r = readViewsDelta(src.metricTab);
     if (r === null || r <= -1) return null;
-    const factor = (1 + r) ** (MONTH_DAYS / periodDays);
+    const factor = ((1 + r) * revenue.adjustment) ** (MONTH_DAYS / periodDays);
     return {
       label: NEXT_LABEL,
       value: `${formatMoney(revenue.revenue * factor)} (${formatFactor(factor)})`,
@@ -349,6 +396,8 @@
     for (const k of Object.keys(lastSignatures)) lastSignatures[k] = null;   // force rebuild
     safeRender();
   });
+
+  document.addEventListener(ADJUSTED_EVENT, schedule);
 
   // GA is a hash-routed SPA — the date range lives in the hash, so this also
   // catches range changes the observer might miss.
